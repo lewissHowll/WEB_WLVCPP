@@ -6,7 +6,7 @@
 
     <div class="panel form-panel">
       <p class="intro-text">
-        Questions, bug reports, or feedback about a prediction — send a message and it'll land directly in our inbox. We'll get back to you as soon as we can.
+        Questions, bug reports, or feedback about a prediction — send a message and it'll land directly in the site owner's inbox.
       </p>
 
       <form v-if="!sent" @submit.prevent="submit" class="contact-form">

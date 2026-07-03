@@ -357,8 +357,12 @@ async function runPrediction() {
   color: var(--ink-soft);
   border-bottom: 1px solid var(--ink);
 }
-.cell-name { font-weight: 500; }
-.cell-seq { overflow-wrap: anywhere; }
+.cell-name {
+  font-weight: 500;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cell-seq { min-width: 0; overflow-wrap: anywhere; }
 
 .badge {
   font-family: var(--font-display);
@@ -375,6 +379,7 @@ async function runPrediction() {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 .prob-track {
   flex: 1;

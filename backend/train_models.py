@@ -6,6 +6,13 @@ Run this whenever rand_train.fa / recep_train.fa change. The API
 per-request, which is what made the original CLI script slow (~8s per run
 even for a handful of peptides).
 
+This also fits and saves *reference feature stats* per classifier
+(fit_reference_stats in wlvcpp/features.py) — the fixed decile-bucket
+boundaries learned from the training data, which predict.py then applies
+to query peptides instead of rebinning against whatever else happens to
+be in the same request. See README's "Batch-independent scoring" section
+for why this matters.
+
 Usage:
     python train_models.py
 """
@@ -14,7 +21,7 @@ import joblib
 from sklearn.svm import SVC
 
 from wlvcpp.parse import from_fasta
-from wlvcpp.features import datset_builder, engineer
+from wlvcpp.features import datset_builder, add_corr, fit_reference_stats, engineer_with_reference
 from wlvcpp.constants import CLASSIFIERS
 
 SEED = 43
@@ -26,24 +33,24 @@ def train_one(name: str, cfg: dict) -> None:
     fasta_path = os.path.join(DATA_DIR, cfg['train_fasta'])
     cpps, ncpps = from_fasta(fasta_path)
     data = datset_builder(cpps, ncpps)
-    data = features_add_corr_and_engineer(data, cfg)
+    data = add_corr(data, cfg['adds'], cfg['subs'])
+
+    # Learn fixed bucket boundaries from the training data itself, ONCE.
+    ref_stats = fit_reference_stats(data)
+    data = engineer_with_reference(data, ref_stats)
+
     y = data['cpp']
     X = data[cfg['feats']]
 
     model = SVC(max_iter=10000, probability=True, random_state=SEED)
     model.fit(X, y)
 
-    out_path = os.path.join(MODELS_DIR, f'{name}_model.joblib')
-    joblib.dump(model, out_path)
+    model_path = os.path.join(MODELS_DIR, f'{name}_model.joblib')
+    ref_path = os.path.join(MODELS_DIR, f'{name}_refstats.joblib')
+    joblib.dump(model, model_path)
+    joblib.dump(ref_stats, ref_path)
     print(f'[{name}] trained on {len(cpps)} CPP / {len(ncpps)} non-CPP peptides '
-          f'-> {out_path}')
-
-
-def features_add_corr_and_engineer(data, cfg):
-    from wlvcpp.features import add_corr
-    data = add_corr(data, cfg['adds'], cfg['subs'])
-    data = engineer(data, 0.9)
-    return data
+          f'-> {model_path}\n         reference stats -> {ref_path}')
 
 
 def main() -> None:

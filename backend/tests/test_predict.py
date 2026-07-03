@@ -54,3 +54,22 @@ def test_known_cpp_scores_above_threshold():
 
 def test_empty_input_returns_empty_list():
     assert predict_peptides([], []) == []
+
+
+def test_scores_are_batch_independent():
+    """Regression guard for the bug found in production: the original
+    algorithm rebinned features against whatever else was in the same
+    request, so the same peptide could score very differently depending
+    on batch composition (demonstrated: TAT scored 84.2% alone vs 98.3%
+    alongside penetratin). This must no longer be true."""
+    tat = "GRKKRRQRRRPPQ"
+    penetratin = "RQIKIWFQNRRMKWKK"
+
+    alone = predict_peptides(["tat"], [tat])[0]["probability"]
+    with_penetratin = predict_peptides(["tat", "pen"], [tat, penetratin])[0]["probability"]
+    with_ten_others = predict_peptides(
+        ["tat"] + [f"junk{i}" for i in range(10)],
+        [tat] + ["ACDEFGHIKLMNPQRSTVWY"[i % 20:] + "AAA" for i in range(10)],
+    )[0]["probability"]
+
+    assert alone == with_penetratin == with_ten_others

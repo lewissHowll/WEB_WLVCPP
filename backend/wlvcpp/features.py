@@ -132,6 +132,70 @@ def engineer(data: pd.DataFrame, thr: float) -> pd.DataFrame:
     return data
 
 
+def fit_reference_stats(data: pd.DataFrame) -> Dict[str, Dict[str, float]]:
+    """Learn fixed log1p shift + decile-bucket boundaries from a dataset
+    (the training set), so they can be re-applied identically to any future
+    query batch — instead of `engineer()` recomputing quantiles from
+    whatever peptides happen to be in that particular request.
+
+    This is what makes scores batch-independent: without it, the exact
+    same peptide can score very differently depending on which other
+    peptides were submitted alongside it (see README — this was a real,
+    demonstrated ~14-point probability swing on the TAT peptide).
+    """
+    stats: Dict[str, Dict[str, float]] = {}
+    for c in data.columns:
+        if c in ('cpp', 'peps'):
+            continue
+        minv = min(data[c])
+        logged = np.log1p(data[c] - minv + 1)
+        q1 = logged.quantile(0.25)
+        q3 = logged.quantile(0.75)
+        iqr = q3 - q1
+        low = q1 - 1.5 * iqr
+        up = q3 + 1.5 * iqr
+        clipped = logged.clip(lower=low, upper=up)
+        mn, mx = float(clipped.min()), float(clipped.max())
+        d = (mx - mn) / 10
+        stats[c] = {'minv': float(minv), 'low': float(low), 'up': float(up),
+                     'mn': mn, 'mx': mx, 'd': d}
+    return stats
+
+
+def _bin_value(val: float, mn: float, mx: float, d: float) -> float:
+    """Same decile-bucket rule as categorise()'s inner loop, but against
+    fixed (mn, mx, d) rather than values recomputed from the current batch."""
+    if d == 0:
+        # every training peptide had the same value for this column —
+        # categorise() would collapse it to 0.1 too in that case.
+        return 0.1
+    for i in range(1, 11):
+        if val <= mn + i * d:
+            return i / 10
+    return 1.0  # shouldn't happen once val is clipped to <= mx, but guard anyway
+
+
+def engineer_with_reference(data: pd.DataFrame, ref: Dict[str, Dict[str, float]]) -> pd.DataFrame:
+    """Batch-independent counterpart to engineer(): applies fixed stats
+    learned once via fit_reference_stats() (normally on the training set)
+    instead of recomputing quantiles from `data` itself."""
+    for c in data.columns:
+        if c in ('cpp', 'peps'):
+            continue
+        if c not in ref:
+            raise KeyError(
+                f"No reference stats for column '{c}' — it wasn't present "
+                "when fit_reference_stats() was run on the training data."
+            )
+        s = ref[c]
+        # clamp raw value to >= training minv so log1p never sees < -1
+        raw_clamped = data[c].clip(lower=s['minv'])
+        logged = np.log1p(raw_clamped - s['minv'] + 1)
+        clipped = logged.clip(lower=s['low'], upper=s['up'])
+        data[c] = [_bin_value(float(v), s['mn'], s['mx'], s['d']) for v in clipped]
+    return data
+
+
 def add_corr(data: pd.DataFrame, adds: List[str], subs: List[str]) -> pd.DataFrame:
     data['corr'] = round(sum(data[c] for c in adds) - sum(data[c] for c in subs))
     return data

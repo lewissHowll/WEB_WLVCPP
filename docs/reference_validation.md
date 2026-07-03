@@ -122,6 +122,37 @@ original tool weren't just uninformative, they were also unreproducible
 run to run, which is a stronger indicator this was an oversight rather
 than an intentional design choice.
 
+## Known limitation (not fixed by this PR — flagging for discussion)
+
+Separate from the batch-dependence bug above, testing turned up a pattern
+worth raising with the researcher: **the model appears to have little to
+no real discriminative signal on extreme homopolymer sequences** (a
+peptide of one residue repeated), in either direction.
+
+- `AAAAA` (poly-alanine, any length tested 1–20) scores confidently CPP
+  (~87–93%) — traced to a real but thin asymmetry in `rand_train.fa`
+  (30/410 CPPs are >60% nonpolar residues, vs. 1/410 non-CPPs). Confirmed
+  present in the *original* algorithm too, not introduced by this fix.
+- `DDDDDDDD` (poly-aspartate) scores CPP (58.1%); `EEEEEEEE`
+  (poly-glutamate) scores non-CPP (49.4%) — despite D and E being grouped
+  as chemically equivalent ("negative") in the model's own feature scheme.
+- Sweeping poly-glutamate length from 8 to 150 residues:
+
+  | length | 8 | 12 | 20 | 30 | 50 | 70 | 89 | 100 | 150 |
+  |---|---|---|---|---|---|---|---|---|---|
+  | probability | .494 | .488 | .491 | .506 | .517 | .517 | .517 | .517 | .517 |
+
+  Every value sits within ~2 points of the 50% decision boundary across a
+  20x length range — no real signal, just noise straddling the threshold.
+
+**This is not something this PR fixes**, and it's arguably not fixable by
+a scoring-pipeline change at all — it looks like a training-data /
+feature-selection question rather than an implementation bug. Flagging it
+because it suggests the model may generalize poorly to peptides unlike
+anything in the ~800-peptide training set (real CPPs are essentially never
+pure homopolymers), which is worth knowing regardless of what happens with
+the batch-dependence fix above.
+
 ## What this means for the published feature sets
 
 `FEATS_RAND` / `FEATS_RECEP` and the `adds`/`subs` correlation-feature lists

@@ -1,18 +1,22 @@
 """WLVCPP API — cell-penetrating peptide prediction.
 
 POST /api/predict  { "fasta": ">name\\nSEQUENCE\\n..." }  -> predictions + discarded entries
+POST /api/contact  { "name", "email", "subject", "comment" }  -> emails the site owner
 GET  /api/health
 """
 from typing import List
+import os
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, EmailStr
 
 from wlvcpp.parse import check_entries
 from wlvcpp.predict import predict_peptides, residue_groups
 from auth import BasicAuthMiddleware
+from mailer import send_contact_email
 
 app = FastAPI(title="WLVCPP API", version="1.0.0")
 
@@ -48,6 +52,13 @@ class DiscardedOut(BaseModel):
 class PredictResponse(BaseModel):
     predictions: List[PredictionOut]
     discarded: List[DiscardedOut]
+
+
+class ContactRequest(BaseModel):
+    name: str
+    email: EmailStr
+    subject: str
+    comment: str
 
 
 @app.get("/api/health")
@@ -90,8 +101,47 @@ def predict(req: PredictRequest):
     return PredictResponse(predictions=predictions, discarded=discarded)
 
 
-# Serve the built Vue frontend (if present) at /
-try:
-    app.mount("/", StaticFiles(directory="static", html=True), name="static")
-except RuntimeError:
-    pass  # static/ not built yet — fine for local API-only dev
+@app.post("/api/contact")
+def contact(req: ContactRequest):
+    name = req.name.strip()
+    subject = req.subject.strip()
+    comment = req.comment.strip()
+
+    if not name or not subject or not comment:
+        raise HTTPException(status_code=400, detail="Name, subject and message are all required.")
+    if len(comment) > 5000:
+        raise HTTPException(status_code=400, detail="Message is too long (max 5000 characters).")
+
+    try:
+        send_contact_email(name, req.email, subject, comment)
+    except RuntimeError as exc:
+        # SMTP not configured — fail loudly rather than silently dropping the message
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Failed to send message: {exc}") from exc
+
+    return {"status": "sent"}
+
+
+# --- Serve the built Vue frontend ---
+# Mounting StaticFiles at "/" only serves index.html for the exact root path,
+# not for client-side routes like /contact — a hard refresh or direct link to
+# /contact would 404. So: serve /assets (JS/CSS) and known static files
+# directly, and fall back to index.html for anything else that isn't /api/*,
+# letting vue-router's client-side routing take over.
+STATIC_DIR = "static"
+
+if os.path.isdir(STATIC_DIR):
+    app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
+
+    @app.get("/{full_path:path}")
+    def spa_fallback(full_path: str):
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        requested = os.path.join(STATIC_DIR, full_path)
+        if full_path and os.path.isfile(requested):
+            return FileResponse(requested)
+        index_path = os.path.join(STATIC_DIR, "index.html")
+        if os.path.isfile(index_path):
+            return FileResponse(index_path)
+        raise HTTPException(status_code=404, detail="Not Found")

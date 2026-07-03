@@ -164,30 +164,35 @@ You have two options for the actual deploy, pick one:
 
 ## Contact form
 
-The Contact page (`/contact`) emails the site owner directly — configured
-via SMTP env vars, no third-party form service involved:
+The Contact page (`/contact`) emails the site owner directly, via the
+[Resend](https://resend.com) HTTP API — not SMTP. This matters on Render:
+free-tier services block outbound SMTP ports (25/465/587) entirely to
+prevent spam abuse, so a plain SMTP-based mailer fails with a network
+error regardless of correct credentials. Resend's API runs over normal
+HTTPS, which isn't blocked.
 
-- `SMTP_HOST` — required, e.g. `smtp.fasthosts.co.uk`, `smtp.gmail.com`
-- `SMTP_PORT` — optional, default `587` (STARTTLS)
-- `SMTP_USERNAME` — required, the mailbox to send FROM
-- `SMTP_PASSWORD` — required
-- `SMTP_FROM` — optional, defaults to `SMTP_USERNAME`
+- `RESEND_API_KEY` — required, from `resend.com/api-keys`
+- `EMAIL_FROM` — optional, defaults to `WLVCPP <onboarding@resend.dev>`
 - `CONTACT_TO_EMAIL` — optional, defaults to `lewis.howl@developyn.com`
 
-**If SMTP isn't configured, the form fails loudly** (a clear 503 in the UI)
-rather than silently dropping messages — so if you deploy without setting
-these, you'll know immediately rather than losing messages quietly.
+**If `RESEND_API_KEY` isn't set, the form fails loudly** (a clear 503 in
+the UI) rather than silently dropping messages.
 
-Since your domain (`bioportide.co.uk`) doesn't currently have its own
-mailbox, the simplest option is to use an existing email account's SMTP —
-e.g. a Gmail account with an
-[app password](https://support.google.com/accounts/answer/185833) (regular
-Gmail passwords won't work for SMTP), or your Fasthosts email hosting if
-you set one up. Whatever you use, `CONTACT_TO_EMAIL` controls where
-messages land — it doesn't have to match `SMTP_USERNAME`.
+**Setup (no domain verification needed for this use case):**
+1. Sign up at resend.com **using `lewis.howl@developyn.com`** as the
+   account email. Resend's free tier restricts the shared
+   `onboarding@resend.dev` sender to only deliver to the address the
+   account was created with — since every contact-form message already
+   goes to that same fixed address (`CONTACT_TO_EMAIL`'s default), this
+   restriction doesn't get in the way, and you can skip DNS/domain
+   verification entirely.
+2. Dashboard → API Keys → create one, copy it.
+3. Render → your service → Environment → add `RESEND_API_KEY`.
+4. Free tier covers 100 emails/day, 3,000/month — plenty for a contact form.
 
-Set these the same way as the auth credentials: Render dashboard → your
-service → Environment.
+If you later want mail to come from your own domain (e.g.
+`contact@bioportide.co.uk`) or to send to different recipients, verify a
+domain in Resend's dashboard and set `EMAIL_FROM` to an address on it.
 
 ## API
 

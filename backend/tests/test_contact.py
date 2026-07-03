@@ -1,5 +1,5 @@
-"""Tests for the /api/contact endpoint. Doesn't test actual SMTP delivery
-(no real mail server in CI) — tests validation and the unconfigured-SMTP
+"""Tests for the /api/contact endpoint. Doesn't test actual Resend delivery
+(no real API key in CI) — tests validation and the unconfigured-API-key
 error path, which is what's actually testable without live credentials."""
 import os
 import sys
@@ -34,14 +34,13 @@ def test_contact_rejects_overlong_message():
     assert resp.status_code == 400
 
 
-def test_contact_fails_loudly_when_smtp_unconfigured(monkeypatch):
-    # SMTP_CONFIGURED is computed at import time, so reimport with the env
-    # vars cleared (same pattern as test_auth.py's _fresh_app helper).
+def test_contact_fails_loudly_when_resend_unconfigured(monkeypatch):
+    # RESEND_CONFIGURED is computed at import time, so reimport with the
+    # env var cleared (same pattern as test_auth.py's _fresh_app helper).
     # Also clear auth env vars and pop the auth module — otherwise this
     # test can inherit AUTH_ENABLED=True left cached by test_auth.py's
     # tests running earlier in the same session, and get a 401 instead.
-    for var in ("SMTP_HOST", "SMTP_USERNAME", "SMTP_PASSWORD",
-                "APP_USERNAME", "APP_PASSWORD"):
+    for var in ("RESEND_API_KEY", "APP_USERNAME", "APP_PASSWORD"):
         monkeypatch.delenv(var, raising=False)
     for mod in ("mailer", "auth", "main"):
         sys.modules.pop(mod, None)
@@ -53,4 +52,4 @@ def test_contact_fails_loudly_when_smtp_unconfigured(monkeypatch):
         "comment": "hello there",
     })
     assert resp.status_code == 503
-    assert "SMTP_HOST" in resp.json()["detail"]
+    assert "RESEND_API_KEY" in resp.json()["detail"]

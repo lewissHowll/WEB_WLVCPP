@@ -1,0 +1,51 @@
+:root {
+  /* base palette — cool paper, not warm-cream default */
+  --paper: #F6F7F5;
+  --paper-raised: #FFFFFF;
+  --ink: #16202A;
+  --ink-soft: #4A5561;
+  --hairline: #D8DDD9;
+
+  /* amino acid physicochemical groups — the algorithm's own vocabulary */
+  --grp-pol: #2A8C82;   /* polar */
+  --grp-non: #8B8778;   /* nonpolar */
+  --grp-aro: #6B4E9E;   /* aromatic */
+  --grp-pos: #2E5EAA;   /* positive */
+  --grp-neg: #B4502A;   /* negative */
+
+  --cpp: #2A8C82;
+  --noncpp: #8B8778;
+
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+a { color: var(--grp-pos); }
+
+button:focus-visible,
+a:focus-visible,
+textarea:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--grp-pos);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
